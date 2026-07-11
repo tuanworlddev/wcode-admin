@@ -29,6 +29,13 @@ export function adminPageHtml() {
   main { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; max-width:1160px; width:100%; margin:0 auto; padding:16px 20px 0; }
   .toolbar { flex:0 0 auto; display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; }
   .toolbar .left { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .tabs { flex:0 0 auto; display:flex; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+  .tab { background:none; border:none; color:var(--muted); padding:9px 14px; border-radius:8px 8px 0 0; font-weight:600; border-bottom:2px solid transparent; }
+  .tab:hover { color:var(--fg); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .view { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+  .view.hidden { display:none !important; }
+  .msg-cell { max-width:520px; white-space:pre-wrap; word-break:break-word; }
   input, select, textarea { width:100%; background:var(--bg); border:1px solid var(--line); color:var(--fg);
           border-radius:8px; padding:8px 10px; font:inherit; transition:border-color .15s ease, box-shadow .15s ease; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,189,248,.15); }
@@ -88,28 +95,54 @@ export function adminPageHtml() {
   <button class="btn-ghost" id="logout">Đăng xuất</button>
 </header>
 <main class="hidden" id="app">
-  <div class="toolbar">
-    <div class="left">
-      <input id="search" placeholder="Tìm theo tên, liên hệ, key...">
-      <button class="btn-ghost" id="refresh">Làm mới</button>
-    </div>
-    <button class="btn-primary" id="openCreate">＋ Tạo license</button>
+  <div class="tabs">
+    <button class="tab active" data-tab="licenses">License</button>
+    <button class="tab" data-tab="reports">Báo cáo lỗi</button>
   </div>
-  <div class="list-wrap" id="listWrap">
-    <table>
-      <thead><tr>
-        <th data-sort="customer_name">Khách</th>
-        <th>Key</th>
-        <th>Máy</th>
-        <th data-sort="starts_at">Bắt đầu</th>
-        <th data-sort="expires_at">Kết thúc</th>
-        <th>Trạng thái</th>
-        <th data-sort="created_at">Tạo</th>
-        <th></th>
-      </tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div id="sentinel"></div>
+
+  <div class="view" id="licenseView">
+    <div class="toolbar">
+      <div class="left">
+        <input id="search" placeholder="Tìm theo tên, liên hệ, key...">
+        <button class="btn-ghost" id="refresh">Làm mới</button>
+      </div>
+      <button class="btn-primary" id="openCreate">＋ Tạo license</button>
+    </div>
+    <div class="list-wrap" id="listWrap">
+      <table>
+        <thead><tr>
+          <th data-sort="customer_name">Khách</th>
+          <th>Key</th>
+          <th>Máy</th>
+          <th data-sort="starts_at">Bắt đầu</th>
+          <th data-sort="expires_at">Kết thúc</th>
+          <th>Trạng thái</th>
+          <th data-sort="created_at">Tạo</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="sentinel"></div>
+    </div>
+  </div>
+
+  <div class="view hidden" id="reportsView">
+    <div class="toolbar">
+      <div class="left"><strong style="color:var(--muted)">Báo cáo lỗi từ người dùng</strong></div>
+      <button class="btn-ghost" id="refreshReports">Làm mới</button>
+    </div>
+    <div class="list-wrap" id="reportsWrap">
+      <table>
+        <thead><tr>
+          <th style="width:130px">Thời gian</th>
+          <th>Khách / Cửa hàng</th>
+          <th style="width:90px">Mã lỗi</th>
+          <th>Nội dung lỗi</th>
+        </tr></thead>
+        <tbody id="reportRows"></tbody>
+      </table>
+      <div id="reportsSentinel"></div>
+    </div>
   </div>
 </main>
 
@@ -169,6 +202,7 @@ async function api(method, path, body) {
 }
 
 const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString('vi-VN') : '—';
+const fmtDateTime = (ms) => ms ? new Date(ms).toLocaleString('vi-VN') : '—';
 const toEndOfDayMs = (v) => v ? new Date(v + 'T23:59:59').getTime() : undefined;
 const toStartMs = (v) => v ? new Date(v + 'T00:00:00').getTime() : undefined;
 const toDateInput = (ms) => { const d = new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
@@ -313,6 +347,61 @@ $('editSave').onclick = async () => {
     $('editDlg').close(); reset();
   } catch (e) { $('editErr').textContent = e.message; }
 };
+
+// ----- Tab chuyển + Báo cáo lỗi (lazy-load) -----
+const R_LIMIT = 30;
+let rOffset = 0, rHasMore = true, rLoading = false, reportsLoaded = false;
+
+document.querySelectorAll('.tab').forEach((tab) => tab.onclick = () => {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === tab));
+  const isReports = tab.dataset.tab === 'reports';
+  $('licenseView').classList.toggle('hidden', isReports);
+  $('reportsView').classList.toggle('hidden', !isReports);
+  if (isReports && !reportsLoaded) resetReports();
+});
+
+function resetReports() {
+  reportsLoaded = true; rOffset = 0; rHasMore = true; rLoading = false;
+  $('reportRows').innerHTML = ''; loadMoreReports();
+}
+
+async function loadMoreReports() {
+  if (rLoading || !rHasMore) return;
+  rLoading = true;
+  $('reportsSentinel').innerHTML = '<span class="spinner"></span>';
+  try {
+    const data = await api('GET', '/api/v1/admin/reports?offset=' + rOffset + '&limit=' + R_LIMIT);
+    appendReports(data.items);
+    rOffset += data.items.length;
+    rHasMore = data.hasMore;
+    if ($('reportRows').children.length === 0) $('reportsSentinel').textContent = 'Chưa có báo cáo nào.';
+    else if (!rHasMore) $('reportsSentinel').textContent = '— hết —';
+    else $('reportsSentinel').innerHTML = '';
+    rLoading = false;
+    const w = $('reportsWrap');
+    if (rHasMore && w.scrollHeight <= w.clientHeight + 40) loadMoreReports();
+  } catch (e) {
+    rLoading = false;
+    if (e.status === 401) return logout();
+    $('reportsSentinel').textContent = 'Lỗi tải: ' + e.message;
+  }
+}
+
+function appendReports(list) {
+  const html = list.map((r) => \`<tr>
+    <td class="muted">\${fmtDateTime(r.createdAt)}</td>
+    <td>\${esc(r.customerName || '(không rõ)')}<div class="muted">\${esc(r.shopName||'')}\${r.entity ? (' · ' + esc(r.entity)) : ''}</div><div class="muted"><code>\${esc(r.licenseKey||'')}</code></div></td>
+    <td>\${esc(r.errorCode||'')}</td>
+    <td class="msg-cell">\${esc(r.message||'')}<div class="muted">\${esc(r.action||'')}\${r.appVersion ? (' · v' + esc(r.appVersion)) : ''}</div></td>
+  </tr>\`).join('');
+  $('reportRows').insertAdjacentHTML('beforeend', html);
+}
+
+$('reportsWrap').addEventListener('scroll', () => {
+  const w = $('reportsWrap');
+  if (w.scrollTop + w.clientHeight >= w.scrollHeight - 120) loadMoreReports();
+});
+$('refreshReports').onclick = resetReports;
 
 if (TOKEN) { $('login').classList.add('hidden'); $('hdr').classList.remove('hidden'); $('app').classList.remove('hidden'); reset(); }
 </script>

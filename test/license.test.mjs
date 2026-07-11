@@ -219,6 +219,33 @@ test('cập nhật license (đổi số máy + ngày kết thúc)', async () => 
   assert.equal(data.expiresAt, newEnd);
 });
 
+test('gửi báo cáo lỗi (public) rồi admin đọc được', async () => {
+  const create = await call('POST', '/api/v1/reports', {
+    body: {
+      licenseKey: 'WC-REPORT-TEST',
+      shopName: 'Shop Lỗi',
+      action: 'PURCHASE_PIPELINE',
+      entity: '04689039063116',
+      errorCode: '1110',
+      message: 'Проверка учетных данных УОТ не пройдена',
+      appVersion: '1.1.0',
+    },
+  });
+  assert.equal(create.status, 201);
+  assert.equal(create.data.ok, true);
+
+  const noauth = await call('GET', '/api/v1/admin/reports');
+  assert.equal(noauth.status, 401);
+
+  const list = await call('GET', '/api/v1/admin/reports?limit=10', { admin: true });
+  assert.equal(list.status, 200);
+  assert.ok(list.data.items.length >= 1);
+  const r = list.data.items[0];
+  assert.equal(r.errorCode, '1110');
+  assert.equal(r.shopName, 'Shop Lỗi');
+  assert.equal(r.action, 'PURCHASE_PIPELINE');
+});
+
 test('web admin panel phục vụ HTML', async () => {
   const res = await fetch(baseUrl + '/admin');
   assert.equal(res.status, 200);

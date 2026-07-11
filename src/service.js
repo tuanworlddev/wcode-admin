@@ -230,6 +230,61 @@ export function createService(db, signer, now = () => Date.now()) {
       };
     },
 
+    // ---- báo cáo lỗi (public nhận từ app, admin đọc) ----
+
+    createReport({
+      licenseKey = '',
+      fingerprint = '',
+      shopName = '',
+      action = '',
+      entity = '',
+      errorCode = '',
+      message = '',
+      appVersion = '',
+    }) {
+      const clip = (s, n) => String(s ?? '').slice(0, n);
+      db.prepare(
+        `INSERT INTO reports (license_key, fingerprint, shop_name, action, entity, error_code, message, app_version, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        clip(licenseKey, 64),
+        clip(fingerprint, 128),
+        clip(shopName, 200),
+        clip(action, 64),
+        clip(entity, 200),
+        clip(errorCode, 32),
+        clip(message, 4000),
+        clip(appVersion, 32),
+        now(),
+      );
+      return { ok: true };
+    },
+
+    listReports({ offset = 0, limit = 30 } = {}) {
+      const rows = db
+        .prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT ? OFFSET ?')
+        .all(Math.max(1, Number(limit)) + 1, Math.max(0, Number(offset)))
+        .map((r) => {
+          const lic = r.license_key
+            ? db.prepare('SELECT customer_name FROM licenses WHERE license_key = ?').get(r.license_key)
+            : null;
+          return {
+            id: r.id,
+            licenseKey: r.license_key,
+            customerName: lic ? lic.customer_name : '',
+            shopName: r.shop_name,
+            action: r.action,
+            entity: r.entity,
+            errorCode: r.error_code,
+            message: r.message,
+            appVersion: r.app_version,
+            createdAt: r.created_at,
+          };
+        });
+      const lim = Math.max(1, Number(limit));
+      return { items: rows.slice(0, lim), hasMore: rows.length > lim };
+    },
+
     listLicenses({ q = '', sort = 'created_at', order = 'desc', offset = 0, limit } = {}) {
       const sortColumns = {
         created_at: 'l.created_at',

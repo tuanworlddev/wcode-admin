@@ -35,8 +35,22 @@ export function openDb(dbPath) {
       detail TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      license_key TEXT NOT NULL DEFAULT '',
+      fingerprint TEXT NOT NULL DEFAULT '',
+      shop_name TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL DEFAULT '',
+      entity TEXT NOT NULL DEFAULT '',
+      error_code TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL DEFAULT '',
+      app_version TEXT NOT NULL DEFAULT '',
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_devices_license ON devices(license_id);
     CREATE INDEX IF NOT EXISTS idx_events_license ON events(license_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);
   `);
   ensureColumn(db, 'licenses', 'starts_at', 'INTEGER NOT NULL DEFAULT 0');
   return db;

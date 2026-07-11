@@ -86,6 +86,7 @@ export function createServer(service, adminToken) {
           case 'activate': return send(200, service.activate(body));
           case 'validate': return send(200, service.validate(body));
           case 'deactivate': return send(200, service.deactivate(body));
+          case 'reports': return send(201, service.createReport(body));
           default: return send(404, { error: { code: 'not_found', message: 'Không có endpoint này' } });
         }
       }
@@ -119,6 +120,20 @@ export function createServer(service, adminToken) {
         if (req.method === 'POST' && seg.length === 6 && seg[5] === 'revoke') return send(200, service.revokeLicense(key));
         if (req.method === 'DELETE' && seg.length === 7 && seg[5] === 'devices') {
           return send(200, service.removeDevice(key, seg[6]));
+        }
+        return send(404, { error: { code: 'not_found', message: 'Không có endpoint này' } });
+      }
+
+      // ---- admin: /api/v1/admin/reports ----
+      if (seg[0] === 'api' && seg[1] === 'v1' && seg[2] === 'admin' && seg[3] === 'reports') {
+        if (!tokenEquals(req.headers['x-admin-token'] ?? '', adminToken)) {
+          return send(401, { error: { code: 'unauthorized', message: 'Sai hoặc thiếu x-admin-token' } });
+        }
+        if (req.method === 'GET' && seg.length === 4) {
+          return send(200, service.listReports({
+            offset: Number(url.searchParams.get('offset') ?? 0),
+            limit: Number(url.searchParams.get('limit') ?? 30),
+          }));
         }
         return send(404, { error: { code: 'not_found', message: 'Không có endpoint này' } });
       }
