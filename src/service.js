@@ -230,7 +230,7 @@ export function createService(db, signer, now = () => Date.now()) {
       };
     },
 
-    listLicenses({ q = '', sort = 'created_at', order = 'desc' } = {}) {
+    listLicenses({ q = '', sort = 'created_at', order = 'desc', offset = 0, limit } = {}) {
       const sortColumns = {
         created_at: 'l.created_at',
         expires_at: 'l.expires_at',
@@ -248,7 +248,7 @@ export function createService(db, signer, now = () => Date.now()) {
         .all();
       const ts = now();
       const needle = String(q).trim().toLowerCase();
-      return rows
+      const filtered = rows
         .filter((l) =>
           !needle ||
           l.customer_name.toLowerCase().includes(needle) ||
@@ -266,6 +266,17 @@ export function createService(db, signer, now = () => Date.now()) {
           createdAt: l.created_at,
           status: statusOf(l, ts),
         }));
+      // limit không truyền -> trả tất cả (CLI); có limit -> phân trang cho lazy-load.
+      if (limit === undefined || limit === null) {
+        return { items: filtered, hasMore: false, total: filtered.length };
+      }
+      const start = Math.max(0, Number(offset) || 0);
+      const lim = Math.max(1, Number(limit));
+      return {
+        items: filtered.slice(start, start + lim),
+        hasMore: start + lim < filtered.length,
+        total: filtered.length,
+      };
     },
   };
 }

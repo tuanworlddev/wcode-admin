@@ -97,13 +97,15 @@ export function createServer(service, adminToken) {
         }
         const key = seg[4];
         if (req.method === 'GET' && seg.length === 4) {
-          return send(200, {
-            licenses: service.listLicenses({
-              q: url.searchParams.get('q') ?? '',
-              sort: url.searchParams.get('sort') ?? 'created_at',
-              order: url.searchParams.get('order') ?? 'desc',
-            }),
+          const limitParam = url.searchParams.get('limit');
+          const result = service.listLicenses({
+            q: url.searchParams.get('q') ?? '',
+            sort: url.searchParams.get('sort') ?? 'created_at',
+            order: url.searchParams.get('order') ?? 'desc',
+            offset: Number(url.searchParams.get('offset') ?? 0),
+            limit: limitParam == null ? undefined : Number(limitParam),
           });
+          return send(200, { licenses: result.items, hasMore: result.hasMore, total: result.total });
         }
         if (req.method === 'POST' && seg.length === 4) return send(201, service.createLicense(await readJsonBody(req)));
         if (req.method === 'GET' && seg.length === 5) return send(200, service.adminView(key));
