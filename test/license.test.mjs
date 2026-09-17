@@ -253,3 +253,14 @@ test('web admin panel phục vụ HTML', async () => {
   const html = await res.text();
   assert.match(html, /WCode/);
 });
+
+test('admin receives long request and response diagnostics without the old 4000-character cut', async () => {
+  const message = 'Summary: invalid size\nRequest payload:\n' + 'Размер 164; '.repeat(6000)
+    + '\nResponse body:\n{"error_details":{"attr_id":"35"}}';
+  const created = await call('POST', '/api/v1/reports', {
+    body: { entity: 'long-diagnostics', message },
+  });
+  assert.equal(created.status, 201);
+  const list = await call('GET', '/api/v1/admin/reports?limit=10', { admin: true });
+  assert.equal(list.data.items.find(r => r.entity === 'long-diagnostics').message, message);
+});

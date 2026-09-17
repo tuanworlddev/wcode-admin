@@ -253,7 +253,7 @@ export function createService(db, signer, now = () => Date.now()) {
         clip(action, 64),
         clip(entity, 200),
         clip(errorCode, 32),
-        clip(message, 4000),
+        clip(message, 128_000),
         clip(appVersion, 32),
         now(),
       );

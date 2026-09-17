@@ -11,13 +11,13 @@ function sendHtml(res, html) {
 const BODY_LIMIT = 64 * 1024;
 const RATE_LIMIT = { windowMs: 60_000, max: 60 }; // 60 request/phút/IP cho endpoint public
 
-function readJsonBody(req) {
+function readJsonBody(req, limit = BODY_LIMIT) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > BODY_LIMIT) {
+      if (size > limit) {
         reject(new LicenseError(413, 'payload_too_large', 'Body quá lớn'));
         req.destroy();
         return;
@@ -81,7 +81,7 @@ export function createServer(service, adminToken) {
         const ip = req.socket.remoteAddress || 'unknown';
         if (!rateLimitOk(ip)) return send(429, { error: { code: 'rate_limited', message: 'Quá nhiều request, thử lại sau' } });
         if (req.method !== 'POST' || seg.length !== 3) return send(404, { error: { code: 'not_found', message: 'Không có endpoint này' } });
-        const body = await readJsonBody(req);
+        const body = await readJsonBody(req, seg[2] === 'reports' ? 1024 * 1024 : BODY_LIMIT);
         switch (seg[2]) {
           case 'activate': return send(200, service.activate(body));
           case 'validate': return send(200, service.validate(body));
